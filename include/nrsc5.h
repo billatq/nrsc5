@@ -886,6 +886,7 @@ NRSC5_API int nrsc5_pipe_samples_cf32(nrsc5_t *st, const float *samples, unsigne
 
 /**
  * Resets the current session.
+ * Gain is reset if auto-gain is enabled
  *
  * @param[in] st  pointer to an `nrsc5_t` session object
  * @return 0 on success, nonzero on error
