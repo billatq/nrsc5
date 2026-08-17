@@ -884,4 +884,13 @@ NRSC5_API int nrsc5_pipe_samples_cs16(nrsc5_t *st, const int16_t *samples, unsig
  */
 NRSC5_API int nrsc5_pipe_samples_cf32(nrsc5_t *st, const float *samples, unsigned int length);
 
+/**
+ * Resets the current session.
+ *
+ * @param[in] st  pointer to an `nrsc5_t` session object
+ * @return 0 on success, nonzero on error
+ *
+ */
+NRSC5_API int nrsc5_reset(nrsc5_t *st);
+
 #endif /* NRSC5_H_ */
