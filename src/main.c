@@ -413,6 +413,10 @@ static void callback(const nrsc5_event_t *evt, void *opaque)
                 log_info("Unique file identifier: %s %s", evt->id3.ufid.owner, evt->id3.ufid.id);
             if (evt->id3.xhdr.param >= 0)
                 log_info("XHDR: %d %08X %d", evt->id3.xhdr.param, evt->id3.xhdr.mime, evt->id3.xhdr.lot);
+            if (evt->id3.commercial.price != NULL)
+                log_info("Commercial: price=%s until=%.4s-%.2s-%.2s url=\"%s\" seller=\"%s\" desc=\"%s\" received_as=%d",
+                    evt->id3.commercial.price, evt->id3.commercial.valid_until, &evt->id3.commercial.valid_until[4], &evt->id3.commercial.valid_until[6],
+                    evt->id3.commercial.contact_url, evt->id3.commercial.seller, evt->id3.commercial.description, evt->id3.commercial.received_as);
         }
         break;
     case NRSC5_EVENT_SIG:

@@ -453,6 +453,15 @@ struct nrsc5_event_t
                 int lot;
             } xhdr;
             nrsc5_id3_comment_t *comments;
+            struct
+            {
+                char* price;
+                char valid_until[8];
+                char* contact_url;
+                char* seller;
+                char* description;
+                uint8_t received_as;
+            } commercial;
         } id3;
         struct {
             uint16_t port;  /**< DEPRECATED: Use `component->data.port` instead */

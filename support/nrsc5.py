@@ -204,7 +204,8 @@ Audio = collections.namedtuple("Audio", ["program", "data"])
 Comment = collections.namedtuple("Comment", ["lang", "short_content_desc", "full_text"])
 UFID = collections.namedtuple("UFID", ["owner", "id"])
 XHDR = collections.namedtuple("XHDR", ["mime", "param", "lot"])
-ID3 = collections.namedtuple("ID3", ["program", "title", "artist", "album", "genre", "ufid", "xhdr", "comments"])
+Commercial = collections.namedtuple("Commercial", ["price", "valid_until", "contact_url", "seller", "description", "received_as"])
+ID3 = collections.namedtuple("ID3", ["program", "title", "artist", "album", "genre", "ufid", "xhdr", "comments", "commercial"])
 SIGAudioComponent = collections.namedtuple("SIGAudioComponent", ["port", "type", "mime"])
 SIGDataComponent = collections.namedtuple("SIGDataComponent", ["port", "service_data_type", "type", "mime"])
 SIGComponent = collections.namedtuple("SIGComponent", ["type", "id", "audio", "data"])
@@ -310,6 +311,15 @@ class _XHDR(ctypes.Structure):
         ("lot", ctypes.c_int),
     ]
 
+class _Commercial(ctypes.Structure):
+    _fields_ = [
+        ("price", ctypes.c_char_p),
+        ("valid_until", ctypes.c_char * 8),
+        ("contact_url", ctypes.c_char_p),
+        ("seller", ctypes.c_char_p),
+        ("description", ctypes.c_char_p),
+        ("received_as", ctypes.c_ubyte),
+    ]
 
 class _ID3(ctypes.Structure):
     _fields_ = [
@@ -321,6 +331,7 @@ class _ID3(ctypes.Structure):
         ("ufid", _UFID),
         ("xhdr", _XHDR),
         ("comments", ctypes.POINTER(_Comment)),
+        ("commercial", _Commercial),
     ]
 
 
@@ -754,9 +765,17 @@ class NRSC5:
                 c = comment_ptr.contents
                 comments.append(Comment(self._decode(c.lang), self._decode(c.short_content_desc), self._decode(c.full_text)))
                 comment_ptr = c.next
+            commercial = None
+            if id3.commercial.price:
+                commercial = Commercial(self._decode(id3.commercial.price),
+                                        self._decode(id3.commercial.valid_until),
+                                        self._decode(id3.commercial.contact_url),
+                                        self._decode(id3.commercial.seller),
+                                        self._decode(id3.commercial.description),
+                                        id3.commercial.received_as)
 
             evt = ID3(id3.program, self._decode(id3.title), self._decode(id3.artist),
-                      self._decode(id3.album), self._decode(id3.genre), ufid, xhdr, comments)
+                      self._decode(id3.album), self._decode(id3.genre), ufid, xhdr, comments, commercial)
         elif evt_type == EventType.SIG:
             evt = []
             self.services = {}
