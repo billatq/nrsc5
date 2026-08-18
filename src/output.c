@@ -296,6 +296,21 @@ static uint8_t* strlen_enc(const int enc, uint8_t *buf, const unsigned int len)
     return NULL;
 }
 
+static int parse_digits(const char *p, size_t n)
+{
+    int value = 0;
+
+    for (size_t i = 0; i < n; i++)
+    {
+        if (p[i] < '0' || p[i] > '9')
+            return -1;
+
+        value = value * 10 + (p[i] - '0');
+    }
+
+    return value;
+}
+
 static void output_id3(output_t *st, unsigned int program, uint8_t *buf, unsigned int len)
 {
     char *title = NULL, *artist = NULL, *album = NULL, *genre = NULL, *ufid_owner = NULL, *ufid_id = NULL;
@@ -303,7 +318,7 @@ static void output_id3(output_t *st, unsigned int program, uint8_t *buf, unsigne
     int xhdr_param = -1, xhdr_lot = -1;
     nrsc5_id3_comment_t *comm = NULL;
     char *price = NULL, *url = NULL, *seller = NULL, *desc = NULL;
-    char until[8] = { 0 };
+    struct tm until = { 0 };
     uint8_t received_as = 0;
 
     unsigned int off = 0, id3_len;
@@ -376,17 +391,40 @@ static void output_id3(output_t *st, unsigned int program, uint8_t *buf, unsigne
 
                 pos = delim[i] + (delim_enc == 1 ? 2 : 1);
                 if (i == 0)
+                {
+                    until.tm_year = parse_digits((char *) delim[0] + 1, 4) - 1900;
+                    until.tm_mon = parse_digits((char *) delim[0] + 5, 2) - 1;
+                    until.tm_mday = parse_digits((char *) delim[0] + 7, 2);
+
+                    if (until.tm_mday < 0 || until.tm_mon < 0 || until.tm_year < 0)
+                    {
+                        log_debug("Fail to parse valid_until on COMR tag.");
+                        break;
+                    }
+                    if (pos + 8 > end)
+                    {
+                        log_warn("bad COMM tag (frame_len %d)", frame_len);
+                        break;
+                    }
+
                     pos += 8;
+                }
                 else if (i == 1)
+                {
+                    if (pos + 1 > end)
+                    {
+                        log_warn("bad COMM tag (frame_len %d)", frame_len);
+                        break;
+                    }
+
                     pos += 1;
+                }
             }
 
             if (i == 4)
             {
                 uint8_t* end_text = enc == 1 ? delim[2] + 2 : delim[2] + 1;
-
                 price = strdup((char *) data + 1);
-                memcpy(until, (char *) delim[0] + 1, sizeof(until));
                 url = strdup((char *) delim[0] + 9);
                 received_as = *(delim[1] + 1);
                 seller = id3_encode_utf8(enc, delim[1] + 2, delim[2] - (delim[1] + 2));
@@ -474,7 +512,7 @@ static void output_id3(output_t *st, unsigned int program, uint8_t *buf, unsigne
     evt.id3.commercial.seller = seller;
     evt.id3.commercial.description = desc;
     evt.id3.commercial.received_as = received_as;
-    memcpy(evt.id3.commercial.valid_until, until, sizeof(until));
+    evt.id3.commercial.valid_until = &until;
 
     nrsc5_report(st->radio, &evt);
 

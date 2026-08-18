@@ -298,9 +298,10 @@ class NRSC5CLI:
                     logging.info("XHDR: param=%s mime=%s lot=%s",
                                  evt.xhdr.param, evt.xhdr.mime.name, evt.xhdr.lot)
                 if evt.commercial:
-                    logging.info("Commercial: price=%s until=%.4s-%.2s-%.2s url=\"%s\" seller=\"%s\" desc=\"%s\" received_as=%d",
-                                 evt.commercial.price, evt.commercial.valid_until, evt.commercial.valid_until[4:5], evt.commercial.valid_until[6:8],
-                                 evt.commercial.contact_url, evt.commercial.seller, evt.commercial.description, evt.commercial.received_as)
+                    date_str = evt.commercial.valid_until.strftime("%Y-%m-%d")
+                    logging.info("Commercial: price=%s until=%s url=\"%s\" seller=\"%s\" desc=\"%s\" received_as=%d",
+                                 evt.commercial.price, date_str, evt.commercial.contact_url, evt.commercial.seller,
+                                 evt.commercial.description, evt.commercial.received_as)
         elif evt_type == nrsc5.EventType.SIG:
             for service in evt:
                 logging.info("SIG Service: type=%s number=%s name=%s",
