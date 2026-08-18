@@ -398,7 +398,7 @@ static void output_id3(output_t *st, unsigned int program, uint8_t *buf, unsigne
 
                     if (until.tm_mday < 0 || until.tm_mon < 0 || until.tm_year < 0)
                     {
-                        log_debug("Fail to parse valid_until on COMR tag.");
+                        log_warn("Fail to parse valid_until on COMR tag.");
                         break;
                     }
                     if (pos + 8 > end)

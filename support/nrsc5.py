@@ -770,7 +770,11 @@ class NRSC5:
                                         self._decode(id3.commercial.seller),
                                         self._decode(id3.commercial.description),
                                         id3.commercial.received_as,
-                                        self._timestruct_to_datetime(id3.commercial.valid_until))
+                                        datetime.date(
+                                            id3.commercial.valid_until.contents.tm_year + 1900,
+                                            id3.commercial.valid_until.contents.tm_mon + 1,
+                                            id3.commercial.valid_until.contents.tm_mday
+                                        ))
 
             evt = ID3(id3.program, self._decode(id3.title), self._decode(id3.artist),
                       self._decode(id3.album), self._decode(id3.genre), ufid, xhdr, comments, commercial)
