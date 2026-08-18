@@ -26,6 +26,21 @@
 #define PCI_AUDIO_FIXED 0xE3634C
 #define PCI_AUDIO_FIXED_OPP 0x8D8D33
 #define PCI_FIXED 0x3634CE
+#define PCI_RESERVED_1 0x8D338D
+#define PCI_RESERVED_2 0xD8D338
+#define PCI_RESERVED_3 0x634CE3
+#define PCI_COUNT 12
+
+static const unsigned int PCI_POSSIBILITIES[PCI_COUNT] = {
+    PCI_AUDIO,
+    PCI_AUDIO_OPP,
+    PCI_AUDIO_FIXED,
+    PCI_AUDIO_FIXED_OPP,
+    PCI_FIXED,
+    PCI_RESERVED_1,
+    PCI_RESERVED_2,
+    PCI_RESERVED_3,
+};
 
 #define MAX_AUDIO_PACKETS 64
 
@@ -145,7 +160,10 @@ static uint16_t fcs16(const uint8_t *cp, int len)
 
 static int has_audio(frame_t *st)
 {
-    return (st->pci & 0xFFFFFC) != (PCI_FIXED & 0xFFFFFC);
+    return (st->pci & 0xFFFFFC) == (PCI_AUDIO & 0xFFFFFC)
+           || (st->pci & 0xFFFFFC) == (PCI_AUDIO_OPP & 0xFFFFFC)
+           || (st->pci & 0xFFFFFC) == (PCI_AUDIO_FIXED & 0xFFFFFC)
+           || (st->pci & 0xFFFFFC) == (PCI_AUDIO_FIXED_OPP & 0xFFFFFC);
 }
 
 static int has_fixed(frame_t *st)
@@ -642,6 +660,19 @@ void frame_process(frame_t *st, size_t length, logical_channel_t lc)
 
 }
 
+static int fuzzy_pci(const unsigned int pci, const unsigned int pci_len, unsigned int* match)
+{
+    for (int i = 0; i < PCI_COUNT; i++)
+    {
+        const unsigned int score = __builtin_popcount((pci ^ PCI_POSSIBILITIES[i]) >> (24 - pci_len));
+        if (score <= 4) {
+            *match = PCI_POSSIBILITIES[i];
+            return (int) score;
+        }
+    }
+    return -1;
+}
+
 void frame_push(frame_t *st, uint8_t *bits, size_t length, logical_channel_t lc)
 {
     unsigned int start, offset, pci_len;
@@ -709,8 +740,18 @@ void frame_push(frame_t *st, uint8_t *bits, size_t length, logical_channel_t lc)
         }
     }
 
-    st->pci = header;
-    frame_process(st, ptr - st->buffer, lc);
+    const unsigned int len = ptr - st->buffer;
+    unsigned int pci = 0;
+    if (fuzzy_pci(header, pci_len, &pci) < 0)
+    {
+        if ((len == MAX_PDU_LEN || len == P1_PDU_LEN_AM))
+            input_set_sync_state(st->input, SYNC_STATE_NONE);
+        return;
+    }
+
+    st->pci = pci;
+
+    frame_process(st, len, lc);
 }
 
 void frame_reset(frame_t *st)
