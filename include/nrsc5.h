@@ -455,12 +455,12 @@ struct nrsc5_event_t
             nrsc5_id3_comment_t *comments;
             struct
             {
-                char* price;
-                char valid_until[8];
-                char* contact_url;
-                char* seller;
-                char* description;
-                uint8_t received_as;
+                char* price;         /** price of the product */
+                char valid_until[8]; /** describes for how long the price is valid in YYYYMMDD format */
+                char* contact_url;   /** URL for contacting the seller */
+                char* seller;        /** Name of the seller */
+                char* description;   /** Short description of the product */
+                uint8_t received_as; /** How audio was delivered when bought */
             } commercial;
         } id3;
         struct {
