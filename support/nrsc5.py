@@ -1076,4 +1076,4 @@ class NRSC5:
         self._check_session()
         result = NRSC5.libnrsc5.nrsc5_reset(self.radio)
         if result != 0:
-            raise NRSC5Error("Failed to set frequency.")
+            raise NRSC5Error("Failed to reset session.")
