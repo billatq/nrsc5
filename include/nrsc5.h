@@ -586,7 +586,7 @@ struct nrsc5_event_t
             int is_final;        /**< 1 if this is the final (best) gain value, otherwise 0 */
         } agc;
         struct {
-            const char* manufacturer_id;                           /**< Manufacturer ID, e.g. "GG" or "L7" */
+            const char *manufacturer_id;                           /**< Manufacturer ID, e.g. "GG" or "L7" */
             int core_version[NRSC5_DEVICE_VERSION_LENGTH];         /**< Core Version number. */
             int core_status;                                       /**< Core Version status. 0 (Commercial Release), 1 (Engineering Release), 2 (Patch). */
             int manufacturer_version[NRSC5_DEVICE_VERSION_LENGTH]; /**< Manufacturer-assigned Version number. */
@@ -594,7 +594,7 @@ struct nrsc5_event_t
             int importer_connected;                                /**< 1 if an importer is connected, otherwise 0. */
         } exciter_info;
         struct {
-            const char* manufacturer_id;                           /**< Manufacturer ID, e.g. "GG" or "L7" */
+            const char *manufacturer_id;                           /**< Manufacturer ID, e.g. "GG" or "L7" */
             int core_version[NRSC5_DEVICE_VERSION_LENGTH];         /**< Core Version number. */
             int core_status;                                       /**< Core Version status. 0 (Commercial Release), 1 (Engineering Release), 2 (Patch). */
             int manufacturer_version[NRSC5_DEVICE_VERSION_LENGTH]; /**< Manufacturer-assigned Version number. */
