@@ -1071,3 +1071,9 @@ class NRSC5:
         result = NRSC5.libnrsc5.nrsc5_pipe_samples_cf32(self.radio, samples, len(samples) // 4)
         if result != 0:
             raise NRSC5Error("Failed to pipe samples.")
+
+    def reset(self):
+        self._check_session()
+        result = NRSC5.libnrsc5.nrsc5_reset(self.radio)
+        if result != 0:
+            raise NRSC5Error("Failed to reset session.")

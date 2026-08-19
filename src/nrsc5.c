@@ -543,12 +543,20 @@ int nrsc5_set_frequency(nrsc5_t *st, float freq)
     if (st->rtltcp && rtltcp_set_center_freq(st->rtltcp, freq) != 0)
         return 1;
 
-    if (st->auto_gain)
-        st->gain = -1;
-    input_reset(&st->input);
-    output_reset(&st->output);
+    nrsc5_reset(st);
 
     st->freq = freq;
+    return 0;
+}
+
+NRSC5_API int nrsc5_reset(nrsc5_t *st) {
+    if (!st->stopped)
+        return 1;
+    if (st->auto_gain)
+        st->gain = -1;
+
+    input_reset(&st->input);
+    output_reset(&st->output);
     return 0;
 }
 
