@@ -764,7 +764,7 @@ class NRSC5:
                 comments.append(Comment(self._decode(c.lang), self._decode(c.short_content_desc), self._decode(c.full_text)))
                 comment_ptr = c.next
             commercial = None
-            if id3.commercial.price:
+            if id3.commercial.price is not None:
                 commercial = Commercial(self._decode(id3.commercial.price),
                                         self._decode(id3.commercial.contact_url),
                                         self._decode(id3.commercial.seller),

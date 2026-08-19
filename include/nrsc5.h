@@ -455,12 +455,12 @@ struct nrsc5_event_t
             nrsc5_id3_comment_t *comments;
             struct
             {
-                char* price;            /** price of the product */
-                char* contact_url;      /** URL for contacting the seller */
-                char* seller;           /** Name of the seller */
-                char* description;      /** Short description of the product */
+                char *price;            /** price of the product */
+                char *contact_url;      /** URL for contacting the seller */
+                char *seller;           /** Name of the seller */
+                char *description;      /** Short description of the product */
                 uint8_t received_as;    /** How audio is delivered when bought */
-                struct tm* valid_until; /** Date when the price expires */
+                struct tm *valid_until; /** Date when the price expires. Note that only the `tm_year`, `tm_mon`, and `tm_mday` fields are set. */
             } commercial;
         } id3;
         struct {
