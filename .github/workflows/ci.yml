@@ -13,7 +13,7 @@ jobs:
       - name: Install dependencies
         run: sudo apt-get update -qq && sudo apt-get install -y libao-dev libfftw3-dev librtlsdr-dev python3-pyaudio
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Configure
         run: |
           mkdir build
@@ -59,7 +59,7 @@ jobs:
           source ${{ runner.temp }}/venv/bin/activate
           pip3 install pyaudio
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Configure
         run: |
           mkdir build
