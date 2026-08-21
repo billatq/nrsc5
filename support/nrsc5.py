@@ -204,7 +204,8 @@ Audio = collections.namedtuple("Audio", ["program", "data"])
 Comment = collections.namedtuple("Comment", ["lang", "short_content_desc", "full_text"])
 UFID = collections.namedtuple("UFID", ["owner", "id"])
 XHDR = collections.namedtuple("XHDR", ["mime", "param", "lot"])
-ID3 = collections.namedtuple("ID3", ["program", "title", "artist", "album", "genre", "ufid", "xhdr", "comments"])
+Commercial = collections.namedtuple("Commercial", ["price", "contact_url", "seller", "description", "received_as", "valid_until"])
+ID3 = collections.namedtuple("ID3", ["program", "title", "artist", "album", "genre", "ufid", "xhdr", "comments", "commercial"])
 SIGAudioComponent = collections.namedtuple("SIGAudioComponent", ["port", "type", "mime"])
 SIGDataComponent = collections.namedtuple("SIGDataComponent", ["port", "service_data_type", "type", "mime"])
 SIGComponent = collections.namedtuple("SIGComponent", ["type", "id", "audio", "data"])
@@ -235,6 +236,19 @@ ExciterInfo = collections.namedtuple("ExciterInfo", ["manufacturer_id", "core_ve
 ImporterInfo = collections.namedtuple("ImporterInfo", ["manufacturer_id", "core_version", "core_status", "manufacturer_version", "manufacturer_status"])
 LeapSecondOffset = collections.namedtuple("LeapOffset", ["pending_offset", "current_offset", "pending_alfn"])
 LocalTime = collections.namedtuple("LocalTime", ["utc_offset", "dst_regional", "dst_local", "dst_schedule"])
+
+class _TimeStruct(ctypes.Structure):
+    _fields_ = [
+        ("tm_sec", ctypes.c_int),
+        ("tm_min", ctypes.c_int),
+        ("tm_hour", ctypes.c_int),
+        ("tm_mday", ctypes.c_int),
+        ("tm_mon", ctypes.c_int),
+        ("tm_year", ctypes.c_int),
+        ("tm_wday", ctypes.c_int),
+        ("tm_yday", ctypes.c_int),
+        ("tm_isdst", ctypes.c_int),
+    ]
 
 class _IQ(ctypes.Structure):
     _fields_ = [
@@ -310,6 +324,15 @@ class _XHDR(ctypes.Structure):
         ("lot", ctypes.c_int),
     ]
 
+class _Commercial(ctypes.Structure):
+    _fields_ = [
+        ("price", ctypes.c_char_p),
+        ("contact_url", ctypes.c_char_p),
+        ("seller", ctypes.c_char_p),
+        ("description", ctypes.c_char_p),
+        ("received_as", ctypes.c_uint8),
+        ("valid_until", ctypes.POINTER(_TimeStruct)),
+    ]
 
 class _ID3(ctypes.Structure):
     _fields_ = [
@@ -321,6 +344,7 @@ class _ID3(ctypes.Structure):
         ("ufid", _UFID),
         ("xhdr", _XHDR),
         ("comments", ctypes.POINTER(_Comment)),
+        ("commercial", _Commercial),
     ]
 
 
@@ -402,21 +426,6 @@ class _PACKET(ctypes.Structure):
         ("service", ctypes.POINTER(_SIGService)),
         ("component", ctypes.POINTER(_SIGComponent)),
     ]
-
-
-class _TimeStruct(ctypes.Structure):
-    _fields_ = [
-        ("tm_sec", ctypes.c_int),
-        ("tm_min", ctypes.c_int),
-        ("tm_hour", ctypes.c_int),
-        ("tm_mday", ctypes.c_int),
-        ("tm_mon", ctypes.c_int),
-        ("tm_year", ctypes.c_int),
-        ("tm_wday", ctypes.c_int),
-        ("tm_yday", ctypes.c_int),
-        ("tm_isdst", ctypes.c_int),
-    ]
-
 
 class _LOT(ctypes.Structure):
     _fields_ = [
@@ -754,9 +763,21 @@ class NRSC5:
                 c = comment_ptr.contents
                 comments.append(Comment(self._decode(c.lang), self._decode(c.short_content_desc), self._decode(c.full_text)))
                 comment_ptr = c.next
+            commercial = None
+            if id3.commercial.price is not None:
+                commercial = Commercial(self._decode(id3.commercial.price),
+                                        self._decode(id3.commercial.contact_url),
+                                        self._decode(id3.commercial.seller),
+                                        self._decode(id3.commercial.description),
+                                        id3.commercial.received_as,
+                                        datetime.date(
+                                            id3.commercial.valid_until.contents.tm_year + 1900,
+                                            id3.commercial.valid_until.contents.tm_mon + 1,
+                                            id3.commercial.valid_until.contents.tm_mday
+                                        ))
 
             evt = ID3(id3.program, self._decode(id3.title), self._decode(id3.artist),
-                      self._decode(id3.album), self._decode(id3.genre), ufid, xhdr, comments)
+                      self._decode(id3.album), self._decode(id3.genre), ufid, xhdr, comments, commercial)
         elif evt_type == EventType.SIG:
             evt = []
             self.services = {}
