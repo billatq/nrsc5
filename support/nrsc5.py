@@ -330,7 +330,7 @@ class _Commercial(ctypes.Structure):
         ("contact_url", ctypes.c_char_p),
         ("seller", ctypes.c_char_p),
         ("description", ctypes.c_char_p),
-        ("received_as", ctypes.c_ubyte),
+        ("received_as", ctypes.c_uint8),
         ("valid_until", ctypes.POINTER(_TimeStruct)),
     ]
 

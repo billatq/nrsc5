@@ -414,7 +414,7 @@ static void callback(const nrsc5_event_t *evt, void *opaque)
             if (evt->id3.xhdr.param >= 0)
                 log_info("XHDR: %d %08X %d", evt->id3.xhdr.param, evt->id3.xhdr.mime, evt->id3.xhdr.lot);
             strftime(time_str, sizeof(time_str), "%Y-%m-%d", evt->id3.commercial.valid_until);
-            if (evt->id3.commercial.price != NULL)
+            if (evt->id3.commercial.price)
                 log_info("Commercial: price=%s until=%s url=\"%s\" seller=\"%s\" desc=\"%s\" received_as=%d",
                     evt->id3.commercial.price, time_str, evt->id3.commercial.contact_url, evt->id3.commercial.seller,
                     evt->id3.commercial.description, evt->id3.commercial.received_as);

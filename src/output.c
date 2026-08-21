@@ -274,7 +274,7 @@ static char *id3_text(uint8_t *buf, unsigned int frame_len)
         return id3_encode_utf8(0, NULL, 0);
 }
 
-static uint8_t* strlen_enc(const int enc, uint8_t *buf, const unsigned int len)
+static uint8_t* memchr_enc(const int enc, uint8_t *buf, const unsigned int len)
 {
     if (enc == 0)
     {
@@ -376,34 +376,49 @@ static void output_id3(output_t *st, unsigned int program, uint8_t *buf, unsigne
         }
         else if (memcmp(tag, "COMR", 4) == 0)
         {
-            uint8_t enc = data[0];
-            uint8_t *delim[4];
-            uint8_t *pos = data + 1;
+            uint8_t *pos = data;
             uint8_t *end = data + frame_len;
+            if (pos + 1 > end)
+            {
+                log_warn("bad COMR tag (frame_len %d)", frame_len);
+                break;
+            }
+            uint8_t enc = data[0];
+            pos += 1;
 
+            uint8_t *delim[4];
+            uint8_t *delim_end[4];
+            int year, mon, mday;
             int i;
 
             for (i = 0; i < 4; i++)
             {
-                int delim_enc = i > 1 ? enc : 0;
-                if ((delim[i] = strlen_enc(delim_enc, pos, end - pos)) == NULL)
+                int delim_enc = (i >= 2) ? enc : 0;
+                int delim_len = (delim_enc == 1) ? 2 : 1;
+                delim[i] = memchr_enc(delim_enc, pos, end - pos);
+                if (delim[i] == NULL)
+                {
+                    log_warn("bad COMR tag (frame_len %d)", frame_len);
                     break;
+                }
+                delim_end[i] = delim[i] + delim_len;
+                pos = delim_end[i];
 
-                pos = delim[i] + (delim_enc == 1 ? 2 : 1);
                 if (i == 0)
                 {
-                    until.tm_year = parse_digits((char *) delim[0] + 1, 4) - 1900;
-                    until.tm_mon = parse_digits((char *) delim[0] + 5, 2) - 1;
-                    until.tm_mday = parse_digits((char *) delim[0] + 7, 2);
-
-                    if (until.tm_mday < 0 || until.tm_mon < 0 || until.tm_year < 0)
-                    {
-                        log_warn("Fail to parse valid_until on COMR tag.");
-                        break;
-                    }
                     if (pos + 8 > end)
                     {
-                        log_warn("bad COMM tag (frame_len %d)", frame_len);
+                        log_warn("bad COMR tag (frame_len %d)", frame_len);
+                        break;
+                    }
+
+                    year = parse_digits((char *) delim[0] + 1, 4) - 1900;
+                    mon = parse_digits((char *) delim[0] + 5, 2) - 1;
+                    mday = parse_digits((char *) delim[0] + 7, 2);
+
+                    if (year < 0 || mon < 0 || mday < 0)
+                    {
+                        log_warn("Failed to parse valid_until on COMR tag.");
                         break;
                     }
 
@@ -413,7 +428,7 @@ static void output_id3(output_t *st, unsigned int program, uint8_t *buf, unsigne
                 {
                     if (pos + 1 > end)
                     {
-                        log_warn("bad COMM tag (frame_len %d)", frame_len);
+                        log_warn("bad COMR tag (frame_len %d)", frame_len);
                         break;
                     }
 
@@ -423,12 +438,14 @@ static void output_id3(output_t *st, unsigned int program, uint8_t *buf, unsigne
 
             if (i == 4)
             {
-                uint8_t* end_text = enc == 1 ? delim[2] + 2 : delim[2] + 1;
-                price = strdup((char *) data + 1);
-                url = strdup((char *) delim[0] + 9);
-                received_as = *(delim[1] + 1);
-                seller = id3_encode_utf8(enc, delim[1] + 2, delim[2] - (delim[1] + 2));
-                desc = id3_encode_utf8(enc, end_text, end - end_text);
+                price = (char *) data + 1;
+                until.tm_year = year;
+                until.tm_mon = mon;
+                until.tm_mday = mday;
+                url = (char *) delim_end[0] + 8;
+                received_as = *(delim_end[1]);
+                seller = id3_encode_utf8(enc, delim_end[1] + 1, delim[2] - (delim_end[1] + 1));
+                desc = id3_encode_utf8(enc, delim_end[2], delim[3] - delim_end[2]);
             }
         }
         else if (memcmp(tag, "COMM", 4) == 0)
@@ -440,13 +457,13 @@ static void output_id3(output_t *st, unsigned int program, uint8_t *buf, unsigne
             else
             {
                 uint8_t enc = data[0];
-                uint8_t *delim = strlen_enc(enc, data + 4, frame_len - 4);
+                uint8_t *delim = memchr_enc(enc, data + 4, frame_len - 4);
                 uint8_t *end = data + frame_len;
 
                 if (delim)
                 {
                     nrsc5_id3_comment_t* prev = comm;
-                    uint8_t* end_text = enc == 1 ? delim + 2 : delim + 1;
+                    uint8_t* end_text = delim + (enc == 1 ? 2 : 1);
 
                     comm = calloc(1, sizeof(nrsc5_id3_comment_t));
                     comm->lang = strndup((char*) data + 1, 3);
@@ -522,8 +539,6 @@ static void output_id3(output_t *st, unsigned int program, uint8_t *buf, unsigne
     free(genre);
     free(ufid_owner);
     free(ufid_id);
-    free(price);
-    free(url);
     free(seller);
     free(desc);
 
