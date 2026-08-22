@@ -181,6 +181,10 @@ static void aas_free_lot(aas_file_t *file)
 
 static void aas_reset(output_t *st)
 {
+    free(st->sig_bytes);
+    st->sig_bytes = NULL;
+    st->sig_len = 0;
+
     for (int i = 0; i < MAX_SIG_SERVICES; i++)
     {
         sig_service_t *service = &st->services[i];
@@ -579,13 +583,22 @@ static void parse_sig(output_t *st, uint8_t *buf, unsigned int len)
     uint8_t *p = buf;
     sig_service_t *service = NULL;
 
-    if (st->services[0].type != SIG_SERVICE_NONE)
+    if (st->sig_bytes)
     {
-        // We assume that the SIG will never change, and only process it once.
-        return;
+        if ((len == st->sig_len) && (memcmp(buf, st->sig_bytes, len) == 0))
+        {
+            // previously parsed SIG table has not changed
+            return;
+        }
+        else
+        {
+            aas_reset(st);
+        }
     }
 
-    memset(st->services, 0, sizeof(st->services));
+    st->sig_bytes = (uint8_t *) malloc(len);
+    memcpy(st->sig_bytes, buf, len);
+    st->sig_len = len;
 
     while (p < buf + len)
     {
