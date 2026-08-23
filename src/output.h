@@ -124,6 +124,8 @@ typedef struct
     NeAACDecHandle aacdec[MAX_PROGRAMS];
     int16_t silence[NRSC5_AUDIO_FRAME_SAMPLES * 2];
 #endif
+    uint8_t *sig_bytes;
+    unsigned int sig_len;
     sig_service_t services[MAX_SIG_SERVICES];
     unsigned int lot_lru_counter;
     here_images_t here_images;
