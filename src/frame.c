@@ -159,19 +159,19 @@ static uint16_t fcs16(const uint8_t *cp, int len)
     return (crc);
 }
 
-static int has_audio(const frame_t *st)
+static int has_audio(unsigned int pci)
 {
-    return st->pci == PCI_AUDIO
-           || st->pci == PCI_AUDIO_OPP
-           || st->pci == PCI_AUDIO_FIXED
-           || st->pci == PCI_AUDIO_FIXED_OPP;
+    return pci == PCI_AUDIO
+           || pci == PCI_AUDIO_OPP
+           || pci == PCI_AUDIO_FIXED
+           || pci == PCI_AUDIO_FIXED_OPP;
 }
 
-static int has_fixed(const frame_t *st)
+static int has_fixed(unsigned int pci)
 {
-    return st->pci == PCI_AUDIO_FIXED
-           || st->pci == PCI_AUDIO_FIXED_OPP
-           || st->pci == PCI_FIXED;
+    return pci == PCI_AUDIO_FIXED
+           || pci == PCI_AUDIO_FIXED_OPP
+           || pci == PCI_FIXED;
 }
 
 static int fix_header(frame_t *st, uint8_t *buf)
@@ -532,15 +532,15 @@ static size_t process_fixed_data(frame_t *st, size_t length, logical_channel_t l
     return p - st->buffer;
 }
 
-void frame_process(frame_t *st, size_t length, logical_channel_t lc)
+void frame_process(frame_t *st, size_t length, logical_channel_t lc, unsigned int pci)
 {
     unsigned int offset = 0;
     unsigned int audio_end = length;
 
-    if (has_fixed(st))
+    if (has_fixed(pci))
         audio_end = process_fixed_data(st, length, lc);
 
-    if (!has_audio(st))
+    if (!has_audio(pci))
         return;
 
     while (offset < audio_end - RS_CODEWORD_LEN)
@@ -744,14 +744,15 @@ void frame_push(frame_t *st, uint8_t *bits, size_t length, logical_channel_t lc)
         }
     }
 
-    if (fuzzy_pci(header, pci_len, &st->pci) < 0)
+    unsigned int pci;
+    if (fuzzy_pci(header, pci_len, &pci) < 0)
     {
         if (lc == P1_LOGICAL_CHANNEL)
             input_set_sync_state(st->input, SYNC_STATE_NONE);
         return;
     }
     
-    frame_process(st, ptr - st->buffer, lc);
+    frame_process(st, ptr - st->buffer, lc, pci);
 }
 
 void frame_reset(frame_t *st)
@@ -767,7 +768,6 @@ void frame_reset(frame_t *st)
         st->services[prog].latency = -1;
         }
 
-    st->pci = 0;
     for (int prog = 0; prog < MAX_PROGRAMS; prog++)
     {
         st->psd_idx[prog] = -1;
