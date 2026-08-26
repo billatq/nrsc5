@@ -128,7 +128,9 @@ Replace `64` with `32` if you want a 32-bit build. Once the build is complete, c
     --dump-aas-files dir-name            dump AAS files
                                            (WARNING: insecure)
     --dump-hdc file-name                 dump HDC packets
-    --decode-traffic                     write decoded NAVTEQ traffic records to stdout
+    --decode-traffic                     write decoded traffic records to stdout
+    --decode-weather                     write decoded weather records to stdout
+    --dump-packets file-name             dump packet/stream data as JSON Lines
     --location-table file-name           resolve NAVTEQ locations from a location-table TSV
 
 ### Examples:
@@ -171,9 +173,20 @@ NAVTEQ Digital Traffic packets are decoded through the C events
 `NRSC5_EVENT_NAVTEQ_DIGITAL_TRAFFIC` and
 `NRSC5_EVENT_NAVTEQ_ALTERNATE_FREQUENCIES`, with equivalent Python events. Run
 with `--decode-traffic` to write one JSON record per decoded entry and
-alternate-frequency update to stdout. Raw packet hex is available at debug log
-level (`-l 0` or `-l 1`). Pass `--location-table` to include location names
-and coordinates in both the decoded records and debug logs.
+alternate-frequency update to stdout; TTN TEC messages are included when a
+TTN signal is present. Raw packet hex is available at debug log level
+(`-l 0` or `-l 1`), or use `--dump-packets` to capture raw packets and streams
+of all MIME types as JSON Lines. Pass `--location-table` to include location
+names and coordinates in both the decoded records and debug logs.
+
+TTN weather is decoded through `NRSC5_EVENT_TTN_CITY_DATABASE`,
+`NRSC5_EVENT_TTN_WEATHER`, and `NRSC5_EVENT_TTN_SERVICE_NETWORK`. Run with
+`--decode-weather` to write decoded city database snapshots and per-city
+forecasts (short-term hourly, long-term daily, temperatures in Fahrenheit,
+wind speed in mph) to stdout. TTN TPEG frames use standard zlib/DEFLATE with a
+proprietary preset dictionary selected by Adler-32 identifier, so generic TPEG
+tools cannot decompress the raw payloads in a `--dump-packets` capture without
+that dictionary.
 
 Descriptions for all 1,552 defined ALERT-C event codes are compiled from the
 [OpenStreetMap TMC event list](https://wiki.openstreetmap.org/wiki/TMC/Event_Code_List).

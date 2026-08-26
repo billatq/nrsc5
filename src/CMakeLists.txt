@@ -46,6 +46,8 @@ set (LIBRARY_FILES
     pids.c
     rtltcp.c
     sync.c
+    ttn_tpeg.c
+    here_tpeg.c
 
     firdecim_cf32.c
 
@@ -67,6 +69,7 @@ set (
     ${THREAD_LIBRARY}
     ${SOCKET_LIBRARY}
     m
+    z
 )
 
 add_library (

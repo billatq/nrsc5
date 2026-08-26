@@ -30,3 +30,21 @@ target_compile_definitions (
     INVALID_LOCATION_TABLE_PATH="${PROJECT_SOURCE_DIR}/README.md"
 )
 add_test (NAME location_table_test COMMAND location_table_test)
+
+add_executable (
+    ttn_tpeg_test
+    ttn_tpeg_test.c
+    ../src/ttn_tpeg.c
+    ../src/location_table.c
+)
+target_include_directories (ttn_tpeg_test PRIVATE ../include ../src)
+target_link_libraries (ttn_tpeg_test PRIVATE z)
+add_test (NAME ttn_tpeg_test COMMAND ttn_tpeg_test)
+
+add_executable (
+    here_tpeg_test
+    here_tpeg_test.c
+    ../src/here_tpeg.c
+)
+target_include_directories (here_tpeg_test PRIVATE ../include ../src)
+add_test (NAME here_tpeg_test COMMAND here_tpeg_test)

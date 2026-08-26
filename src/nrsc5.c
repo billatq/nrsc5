@@ -2,8 +2,15 @@
 #include <string.h>
 
 #include "private.h"
+#include "ttn_tpeg.h"
 
 pthread_mutex_t fftw_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+void nrsc5_ttn_weather_condition_name(unsigned int condition, const char **name)
+{
+    if (name)
+        *name = ttn_weather_condition_name(condition);
+}
 
 static int get_tuner_gains(nrsc5_t *st, int *gains)
 {
@@ -227,6 +234,12 @@ static void nrsc5_init(nrsc5_t *st)
         pthread_cond_init(&st->worker_cond, NULL);
         pthread_create(&st->worker, NULL, worker_thread, st);
     }
+}
+
+void nrsc5_set_location_table(nrsc5_t *st, nrsc5_location_table_t *table)
+{
+    if (st)
+        st->location_table = table;
 }
 
 void nrsc5_get_version(const char **version)
@@ -842,6 +855,52 @@ void nrsc5_report_navteq_alternate_frequencies(
     evt.navteq_alternate_frequencies.entries = entries;
     evt.navteq_alternate_frequencies.service = service;
     evt.navteq_alternate_frequencies.component = component;
+    nrsc5_report(st, &evt);
+}
+
+void nrsc5_report_ttn_city_database(nrsc5_t *st, const nrsc5_ttn_city_database_t *database)
+{
+    nrsc5_event_t evt;
+
+    evt.event = NRSC5_EVENT_TTN_CITY_DATABASE;
+    evt.ttn_city_database.database = *database;
+    nrsc5_report(st, &evt);
+}
+
+void nrsc5_report_ttn_weather(nrsc5_t *st, unsigned int timestamp, unsigned int count,
+                              const nrsc5_ttn_weather_city_t *cities)
+{
+    nrsc5_event_t evt;
+
+    evt.event = NRSC5_EVENT_TTN_WEATHER;
+    evt.ttn_weather.timestamp = timestamp;
+    evt.ttn_weather.count = count;
+    evt.ttn_weather.cities = cities;
+    nrsc5_report(st, &evt);
+}
+
+void nrsc5_report_ttn_service_network(nrsc5_t *st, const nrsc5_ttn_service_network_t *info)
+{
+    nrsc5_event_t evt;
+
+    evt.event = NRSC5_EVENT_TTN_SERVICE_NETWORK;
+    evt.ttn_service_network.service_network = *info;
+    nrsc5_report(st, &evt);
+}
+
+void nrsc5_report_ttn_tec(nrsc5_t *st, const nrsc5_ttn_tec_t *event)
+{
+    nrsc5_event_t evt = {0};
+    evt.event = NRSC5_EVENT_TTN_TEC;
+    evt.ttn_tec.tec = *event;
+    nrsc5_report(st, &evt);
+}
+
+void nrsc5_report_here_tfp(nrsc5_t *st, const nrsc5_here_tfp_t *flow)
+{
+    nrsc5_event_t evt = {0};
+    evt.event = NRSC5_EVENT_HERE_TFP;
+    evt.here_tfp.flow = *flow;
     nrsc5_report(st, &evt);
 }
 

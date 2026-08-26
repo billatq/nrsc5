@@ -27,6 +27,7 @@ class NRSC5CLI:
         self.wav_output = None
         self.raw_output = None
         self.hdc_output = None
+        self.packet_output = None
         self.navteq_alternate_frequencies = {}
         self.audio_packets_valid = 0
         self.audio_packets = 0
@@ -59,8 +60,12 @@ class NRSC5CLI:
         parser.add_argument("-T", action="store_true")
         parser.add_argument("-D", metavar="direct-sampling-mode", type=int, default=-1)
         parser.add_argument("--dump-hdc", metavar="hdc-output")
+        parser.add_argument("--dump-packets", metavar="packet-output",
+                            help="write packet and stream data as JSON Lines")
+        parser.add_argument("--decode-weather", action="store_true",
+                            help="write decoded weather records to stdout")
         parser.add_argument("--decode-traffic", action="store_true",
-                            help="write decoded NAVTEQ traffic records to stdout")
+                            help="write decoded traffic records to stdout")
         parser.add_argument("--location-table", metavar="file",
                             help="resolve NAVTEQ locations from a location-table TSV file")
         parser.add_argument("--dump-aas-files", metavar="directory")
@@ -136,6 +141,9 @@ class NRSC5CLI:
         if self.args.dump_hdc:
             self.hdc_output = sys.stdout.buffer if self.args.dump_hdc == "-" else open(self.args.dump_hdc, "wb")
 
+        if self.args.dump_packets:
+            self.packet_output = sys.stdout if self.args.dump_packets == "-" else open(self.args.dump_packets, "w", encoding="ascii")
+
         self.radio.start()
 
         try:
@@ -177,6 +185,9 @@ class NRSC5CLI:
 
         if self.args.dump_hdc:
             self.hdc_output.close()
+
+        if self.args.dump_packets:
+            self.packet_output.close()
         self.radio.close_location_table()
 
     def audio_worker(self):
@@ -330,29 +341,31 @@ class NRSC5CLI:
             logging.debug("Stream data: port=%04X seq=%04X mime=%s size=%s data_hex=%s",
                           evt.component.data.port, evt.seq, evt.component.data.mime.name,
                           len(evt.data), evt.data.hex())
+            self.dump_packets_data(evt_type, evt)
         elif evt_type == nrsc5.EventType.PACKET:
             logging.debug("Packet data: port=%04X seq=%04X mime=%s size=%s data_hex=%s",
                           evt.component.data.port, evt.seq, evt.component.data.mime.name,
                           len(evt.data), evt.data.hex())
+            self.dump_packets_data(evt_type, evt)
         elif evt_type == nrsc5.EventType.NAVTEQ_DIGITAL_TRAFFIC:
             logging.debug("NAVTEQ Digital Traffic: port=%04X seq=%04X generation=%d terminal=%s entries=%d",
                           evt.port, evt.seq, evt.generation, evt.is_terminal, len(evt.entries))
             for entry in evt.entries:
                 self.log_navteq_digital_traffic_entry(entry)
                 if self.args.decode_traffic:
+                    point = self.radio.location_table_lookup(entry.country_code,
+                                                             entry.location_table_number,
+                                                             entry.location)
                     record = {"kind": "navteq_digital_traffic", "port": evt.port,
                               "seq": evt.seq, "event": entry.event,
                               "location": entry.location, "extent": entry.extent,
                               "description": self.radio.alert_c_event_description(
                                   entry.event, entry.quantifier)}
-                    point = self.radio.location_table_lookup(entry.country_code,
-                                                             entry.location_table_number,
-                                                             entry.location)
                     if point is not None:
                         record.update({"location_name": point.name,
                                        "latitude": point.latitude,
                                        "longitude": point.longitude})
-                    print(json.dumps(record))
+                    print(json.dumps(record), flush=True)
         elif evt_type == nrsc5.EventType.NAVTEQ_ALTERNATE_FREQUENCIES:
             for entry in evt.entries:
                 if self.navteq_alternate_frequencies.get(entry.index) != entry.frequency_hz:
@@ -360,10 +373,51 @@ class NRSC5CLI:
                     logging.info("NAVTEQ alternate frequency: index=%d frequency=%.1f MHz",
                                  entry.index, entry.frequency_hz / 1000000)
                     if self.args.decode_traffic:
-                        print(json.dumps({"kind": "navteq_alternate_frequency",
-                                          "port": evt.port, "seq": evt.seq,
-                                          "index": entry.index,
-                                          "frequency_hz": entry.frequency_hz}))
+                        print(json.dumps({"kind": "navteq_alternate_frequency", "port": evt.port,
+                                          "seq": evt.seq, "index": entry.index,
+                                          "frequency_hz": entry.frequency_hz}), flush=True)
+        elif evt_type == nrsc5.EventType.TTN_TEC:
+            logging.info("TTN TEC: message=%d location=%d effect=%d cause=%d",
+                         evt.message_id, evt.location, evt.effect_code, evt.cause_code)
+            if self.args.decode_traffic:
+                record = {"kind": "ttn_tec", "message_id": evt.message_id,
+                          "version": evt.version, "expiry_time": evt.expiry_time,
+                          "cancel": evt.cancel,
+                          "location": evt.location, "country_code": evt.country_code,
+                          "location_table_number": evt.location_table_number,
+                          "effect": evt.effect_code, "cause": evt.cause_code,
+                          "warning_level": evt.warning_level,
+                          "direction_positive": evt.direction_positive,
+                          "both_directions": evt.both_directions, "extent": evt.extent}
+                if evt.location_resolved:
+                    record.update({"location_name": evt.resolved_location.name,
+                                   "latitude": evt.resolved_location.latitude,
+                                   "longitude": evt.resolved_location.longitude})
+                print(json.dumps(record), flush=True)
+        elif evt_type == nrsc5.EventType.HERE_TFP:
+            logging.info("HERE TFP: message=%d location=%d LOS=%d speed=%d km/h",
+                         evt.message_id, evt.location, evt.level_of_service,
+                         evt.average_speed)
+            if self.args.decode_traffic:
+                record = {"kind": "here_tfp", "message_id": evt.message_id,
+                          "version": evt.version, "expiry_time": evt.expiry_time,
+                          "cancel": evt.cancel, "start_time": evt.start_time,
+                          "duration": evt.duration,
+                          "spatial_resolution": evt.spatial_resolution,
+                          "polygon_index": evt.polygon_index,
+                          "level_of_service": evt.level_of_service,
+                          "average_speed_kph": evt.average_speed,
+                          "free_flow_travel_time": evt.free_flow_travel_time,
+                          "delay": evt.delay, "location": evt.location,
+                          "country_code": evt.country_code,
+                          "location_table_number": evt.location_table_number,
+                          "direction_positive": evt.direction_positive,
+                          "both_directions": evt.both_directions, "extent": evt.extent}
+                if evt.location_resolved:
+                    record.update({"location_name": evt.resolved_location.name,
+                                   "latitude": evt.resolved_location.latitude,
+                                   "longitude": evt.resolved_location.longitude})
+                print(json.dumps(record), flush=True)
         elif evt_type == nrsc5.EventType.LOT:
             if self.args.dump_aas_files:
                 path = os.path.join(self.args.dump_aas_files, evt.name)
@@ -455,6 +509,62 @@ class NRSC5CLI:
                           evt.utc_offset,
                           evt.dst_schedule,
                           "yes" if evt.dst_regional else "no", "yes" if evt.dst_local else "no")
+        elif evt_type == nrsc5.EventType.TTN_CITY_DATABASE:
+            logging.info("TTN city database: version=%d timestamp=%d cities=%d",
+                         evt.database_version, evt.timestamp, len(evt.cities))
+            if self.args.decode_weather:
+                print(json.dumps({"kind": "ttn_city_database", "version": evt.database_version,
+                                  "timestamp": evt.timestamp, "cities": len(evt.cities)}))
+        elif evt_type == nrsc5.EventType.TTN_WEATHER:
+            logging.info("TTN weather: timestamp=%d cities=%d",
+                         evt.timestamp, len(evt.cities))
+            if self.args.decode_weather:
+                for city in evt.cities:
+                    short_forecasts = [f._asdict() for f in city.short_forecasts]
+                    long_forecasts = [f._asdict() for f in city.long_forecasts]
+                    for forecast in short_forecasts + long_forecasts:
+                        forecast["weather_condition_name"] = self.radio.ttn_weather_condition_name(
+                            forecast["weather_condition"])
+                    for forecast in short_forecasts:
+                        forecast["wind_speed_mph"] = forecast.pop("wind_speed")
+                        forecast["temperature_f"] = forecast.pop("temperature")
+                        forecast["feels_like_temperature_f"] = forecast.pop("feels_like_temperature")
+                        forecast["humidity_percent"] = forecast.pop("humidity")
+                        forecast["chance_of_precipitation_percent"] = forecast.pop("chance_of_precipitation")
+                    for forecast in long_forecasts:
+                        forecast["wind_speed_mph"] = forecast.pop("wind_speed")
+                        forecast["high_temperature_f"] = forecast.pop("high_temperature")
+                        forecast["low_temperature_f"] = forecast.pop("low_temperature")
+                        forecast["chance_of_precipitation_percent"] = forecast.pop("chance_of_precipitation")
+                        forecast["external_feels_like_temperature_f"] = forecast.pop("external_feels_like_temperature")
+                        forecast["maximum_humidity_percent"] = forecast.pop("maximum_humidity")
+                    print(json.dumps({"kind": "ttn_weather", "timestamp": evt.timestamp,
+                                      "city_id": city.city.city_id,
+                                      "provider_city_id": city.city.provider_city_id,
+                                      "name": city.city.name,
+                                      "latitude": city.city.latitude,
+                                      "longitude": city.city.longitude,
+                                      "short_forecasts": short_forecasts,
+                                      "long_forecasts": long_forecasts}), flush=True)
+
+    def dump_packets_data(self, evt_type, evt):
+        if not self.packet_output:
+            return
+
+        record = {
+            "kind": "packet" if evt_type == nrsc5.EventType.PACKET else "stream",
+            "port": evt.port,
+            "seq": evt.seq,
+            "mime": evt.mime.name,
+            "mime_id": f"{evt.mime.value:08x}",
+            "service": evt.service.number,
+            "service_name": evt.service.name,
+            "service_data_type": evt.component.data.service_data_type.name,
+            "aas_type": evt.component.data.type.name,
+            "data_hex": evt.data.hex(),
+        }
+        self.packet_output.write(json.dumps(record, separators=(",", ":")) + "\n")
+        self.packet_output.flush()
 
     def log_navteq_digital_traffic_entry(self, entry):
         event_description = self.radio.alert_c_event_description(entry.event,
