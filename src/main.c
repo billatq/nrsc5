@@ -66,12 +66,12 @@ typedef struct {
     unsigned int device_index;
     int bias_tee;
     int direct_sampling;
+    int decode_traffic;
     int ppm_error;
     char *input_name;
     char *rtltcp_host;
     ao_device *dev;
     FILE *hdc_file;
-    FILE *navteq_file;
     FILE *iq_file;
     nrsc5_location_table_t *location_table;
     char *aas_files_path;
@@ -216,15 +216,19 @@ static void dump_hdc(FILE *fp, const uint8_t *pkt, unsigned int len)
     fflush(fp);
 }
 
-static void dump_navteq(FILE *fp, const char *kind, uint16_t port, uint16_t seq,
-                        const uint8_t *data, unsigned int size)
+static void log_packet_data(const char *kind, uint16_t port, uint16_t seq,
+                            uint32_t mime, const uint8_t *data, unsigned int size)
 {
-    fprintf(fp, "{\"kind\":\"%s\",\"port\":%u,\"seq\":%u,\"mime\":\"NAVTEQ\",\"data_hex\":\"",
-            kind, port, seq);
+    char *hex = malloc(2 * (size_t) size + 1);
+
+    if (hex == NULL)
+        return;
     for (unsigned int i = 0; i < size; i++)
-        fprintf(fp, "%02x", data[i]);
-    fprintf(fp, "\"}\n");
-    fflush(fp);
+        sprintf(hex + 2 * i, "%02x", data[i]);
+    hex[2 * (size_t) size] = '\0';
+    log_debug("%s data: port=%04X seq=%04X mime=%08X size=%d data_hex=%s",
+              kind, port, seq, mime, size, hex);
+    free(hex);
 }
 
 static void dump_aas_file(state_t *st, const nrsc5_event_t *evt)
@@ -520,16 +524,12 @@ static void callback(const nrsc5_event_t *evt, void *opaque)
         }
         break;
     case NRSC5_EVENT_STREAM:
-        log_debug("Stream data: port=%04X seq=%04X mime=%08X size=%d", evt->stream.component->data.port, evt->stream.seq, evt->stream.component->data.mime, evt->stream.size);
-        if (st->navteq_file && evt->stream.component->data.mime == NRSC5_MIME_NAVTEQ)
-            dump_navteq(st->navteq_file, "stream", evt->stream.component->data.port, evt->stream.seq,
-                        evt->stream.data, evt->stream.size);
+        log_packet_data("Stream", evt->stream.component->data.port, evt->stream.seq,
+                        evt->stream.component->data.mime, evt->stream.data, evt->stream.size);
         break;
     case NRSC5_EVENT_PACKET:
-        log_debug("Packet data: port=%04X seq=%04X mime=%08X size=%d", evt->packet.component->data.port, evt->packet.seq, evt->packet.component->data.mime, evt->packet.size);
-        if (st->navteq_file && evt->packet.component->data.mime == NRSC5_MIME_NAVTEQ)
-            dump_navteq(st->navteq_file, "packet", evt->packet.component->data.port, evt->packet.seq,
-                        evt->packet.data, evt->packet.size);
+        log_packet_data("Packet", evt->packet.component->data.port, evt->packet.seq,
+                        evt->packet.component->data.mime, evt->packet.data, evt->packet.size);
         break;
     case NRSC5_EVENT_NAVTEQ_DIGITAL_TRAFFIC:
         log_debug("NAVTEQ Digital Traffic: port=%04X seq=%04X generation=%d terminal=%d entries=%d",
@@ -538,7 +538,30 @@ static void callback(const nrsc5_event_t *evt, void *opaque)
                   evt->navteq_digital_traffic.is_terminal,
                   evt->navteq_digital_traffic.count);
         for (unsigned int i = 0; i < evt->navteq_digital_traffic.count; i++)
-            log_navteq_digital_traffic_entry(st, &evt->navteq_digital_traffic.entries[i]);
+        {
+            const nrsc5_navteq_digital_traffic_entry_t *entry
+                = &evt->navteq_digital_traffic.entries[i];
+            log_navteq_digital_traffic_entry(st, entry);
+            if (st->decode_traffic)
+            {
+                char description[512];
+                nrsc5_location_t point;
+                nrsc5_alert_c_event_description(entry->event, entry->quantifier,
+                                                description, sizeof(description));
+                printf("{\"kind\":\"navteq_digital_traffic\",\"port\":%u,\"seq\":%u,\"event\":%u,\"location\":%u,\"extent\":%u,\"description\":",
+                       evt->navteq_digital_traffic.port, evt->navteq_digital_traffic.seq,
+                       entry->event, entry->location, entry->extent);
+                printf("\"%s\"", description);
+                    if (st->location_table
+                        && nrsc5_location_table_lookup(st->location_table, entry->country_code,
+                                                       entry->location_table_number, entry->location,
+                                                       &point) == 1)
+                        printf(",\"location_name\":\"%s\",\"latitude\":%.7f,\"longitude\":%.7f",
+                               point.name, point.latitude, point.longitude);
+                    printf("}\n");
+                    fflush(stdout);
+            }
+        }
         break;
     case NRSC5_EVENT_NAVTEQ_ALTERNATE_FREQUENCIES:
         for (unsigned int i = 0; i < evt->navteq_alternate_frequencies.count; i++)
@@ -551,6 +574,12 @@ static void callback(const nrsc5_event_t *evt, void *opaque)
                 st->navteq_alternate_frequencies[entry->index] = entry->frequency_hz;
                 log_info("NAVTEQ alternate frequency: index=%d frequency=%.1f MHz",
                          entry->index, entry->frequency_hz / 1000000.0);
+                if (st->decode_traffic)
+                    printf("{\"kind\":\"navteq_alternate_frequency\",\"port\":%u,\"seq\":%u,\"index\":%u,\"frequency_hz\":%u}\n",
+                           evt->navteq_alternate_frequencies.port,
+                           evt->navteq_alternate_frequencies.seq, entry->index,
+                           entry->frequency_hz);
+                fflush(stdout);
             }
         }
         break;
@@ -701,10 +730,10 @@ static void callback(const nrsc5_event_t *evt, void *opaque)
         break;
     case NRSC5_EVENT_LOCAL_TIME:
         log_debug("Local time: UTC offset=%d minutes, DST schedule=%d, DST in effect regionally? %s, DST practiced locally? %s",
-                 evt->local_time.utc_offset,
-                 evt->local_time.dst_schedule,
-                 evt->local_time.dst_regional ? "yes" : "no",
-                 evt->local_time.dst_local ? "yes" : "no");
+                  evt->local_time.utc_offset,
+                  evt->local_time.dst_schedule,
+                  evt->local_time.dst_regional ? "yes" : "no",
+                  evt->local_time.dst_local ? "yes" : "no");
         break;
 
     }
@@ -904,7 +933,7 @@ static void *input_main(void *arg)
 
 static void help(const char *progname)
 {
-    fprintf(stderr, "Usage: %s [-v] [-q] [--am] [-l log-level] [-d device-index] [-H rtltcp-host] [-p ppm-error] [-g gain] [-r iq-input] [--iq-input-format {cu8,cs16}] [-w iq-output] [-o audio-output] [-t audio-type] [-T] [-D direct-sampling-mode] [--dump-hdc hdc-output] [--dump-navteq navteq-output] [--location-table file] [--dump-aas-files directory] frequency program\n", progname);
+    fprintf(stderr, "Usage: %s [-v] [-q] [--am] [-l log-level] [-d device-index] [-H rtltcp-host] [-p ppm-error] [-g gain] [-r iq-input] [--iq-input-format {cu8,cs16}] [-w iq-output] [-o audio-output] [-t audio-type] [-T] [-D direct-sampling-mode] [--dump-hdc hdc-output] [--decode-traffic] [--location-table file] [--dump-aas-files directory] frequency program\n", progname);
 }
 
 static int ends_with(const char *str, const char *suffix)
@@ -921,12 +950,12 @@ static int parse_args(state_t *st, int argc, char *argv[])
         { "dump-hdc", required_argument, NULL, 2 },
         { "am", no_argument, NULL, 3 },
         { "iq-input-format", required_argument, NULL, 4 },
-        { "dump-navteq", required_argument, NULL, 5 },
+        { "decode-traffic", no_argument, NULL, 5 },
         { "location-table", required_argument, NULL, 6 },
         { 0 }
     };
     const char *version = NULL;
-    char *output_name = NULL, *audio_name = NULL, *hdc_name = NULL, *navteq_name = NULL;
+    char *output_name = NULL, *audio_name = NULL, *hdc_name = NULL;
     char *location_table_name = NULL;
     char *audio_type = "wav";
     char *endptr;
@@ -973,7 +1002,7 @@ static int parse_args(state_t *st, int argc, char *argv[])
             }
             break;
         case 5:
-            navteq_name = optarg;
+            st->decode_traffic = 1;
             break;
         case 6:
             location_table_name = optarg;
@@ -1108,19 +1137,6 @@ static int parse_args(state_t *st, int argc, char *argv[])
         }
     }
 
-    if (navteq_name)
-    {
-        if (strcmp(navteq_name, "-") == 0)
-            st->navteq_file = stdout;
-        else
-            st->navteq_file = fopen(navteq_name, "w");
-        if (st->navteq_file == NULL)
-        {
-            log_fatal("Unable to open NAVTEQ output.");
-            return 1;
-        }
-    }
-
     if (location_table_name
         && nrsc5_location_table_open(&st->location_table, location_table_name) != 0)
     {
@@ -1153,8 +1169,6 @@ static void cleanup(state_t *st)
 
     if (st->hdc_file)
         fclose(st->hdc_file);
-    if (st->navteq_file)
-        fclose(st->navteq_file);
     if (st->iq_file)
         fclose(st->iq_file);
     nrsc5_location_table_close(st->location_table);

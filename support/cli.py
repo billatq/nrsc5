@@ -27,7 +27,6 @@ class NRSC5CLI:
         self.wav_output = None
         self.raw_output = None
         self.hdc_output = None
-        self.navteq_output = None
         self.navteq_alternate_frequencies = {}
         self.audio_packets_valid = 0
         self.audio_packets = 0
@@ -60,8 +59,8 @@ class NRSC5CLI:
         parser.add_argument("-T", action="store_true")
         parser.add_argument("-D", metavar="direct-sampling-mode", type=int, default=-1)
         parser.add_argument("--dump-hdc", metavar="hdc-output")
-        parser.add_argument("--dump-navteq", metavar="navteq-output",
-                            help="write NAVTEQ packet data as JSON Lines")
+        parser.add_argument("--decode-traffic", action="store_true",
+                            help="write decoded NAVTEQ traffic records to stdout")
         parser.add_argument("--location-table", metavar="file",
                             help="resolve NAVTEQ locations from a location-table TSV file")
         parser.add_argument("--dump-aas-files", metavar="directory")
@@ -137,9 +136,6 @@ class NRSC5CLI:
         if self.args.dump_hdc:
             self.hdc_output = sys.stdout.buffer if self.args.dump_hdc == "-" else open(self.args.dump_hdc, "wb")
 
-        if self.args.dump_navteq:
-            self.navteq_output = sys.stdout if self.args.dump_navteq == "-" else open(self.args.dump_navteq, "w", encoding="ascii")
-
         self.radio.start()
 
         try:
@@ -181,9 +177,6 @@ class NRSC5CLI:
 
         if self.args.dump_hdc:
             self.hdc_output.close()
-
-        if self.args.dump_navteq:
-            self.navteq_output.close()
         self.radio.close_location_table()
 
     def audio_worker(self):
@@ -334,24 +327,43 @@ class NRSC5CLI:
                                      component.data.service_data_type.name,
                                      component.data.type.name, component.data.mime.name)
         elif evt_type == nrsc5.EventType.STREAM:
-            logging.debug("Stream data: port=%04X seq=%04X mime=%s size=%s",
-                          evt.component.data.port, evt.seq, evt.component.data.mime.name, len(evt.data))
-            self.dump_navteq_data(evt_type, evt)
+            logging.debug("Stream data: port=%04X seq=%04X mime=%s size=%s data_hex=%s",
+                          evt.component.data.port, evt.seq, evt.component.data.mime.name,
+                          len(evt.data), evt.data.hex())
         elif evt_type == nrsc5.EventType.PACKET:
-            logging.debug("Packet data: port=%04X seq=%04X mime=%s size=%s",
-                          evt.component.data.port, evt.seq, evt.component.data.mime.name, len(evt.data))
-            self.dump_navteq_data(evt_type, evt)
+            logging.debug("Packet data: port=%04X seq=%04X mime=%s size=%s data_hex=%s",
+                          evt.component.data.port, evt.seq, evt.component.data.mime.name,
+                          len(evt.data), evt.data.hex())
         elif evt_type == nrsc5.EventType.NAVTEQ_DIGITAL_TRAFFIC:
             logging.debug("NAVTEQ Digital Traffic: port=%04X seq=%04X generation=%d terminal=%s entries=%d",
                           evt.port, evt.seq, evt.generation, evt.is_terminal, len(evt.entries))
             for entry in evt.entries:
                 self.log_navteq_digital_traffic_entry(entry)
+                if self.args.decode_traffic:
+                    record = {"kind": "navteq_digital_traffic", "port": evt.port,
+                              "seq": evt.seq, "event": entry.event,
+                              "location": entry.location, "extent": entry.extent,
+                              "description": self.radio.alert_c_event_description(
+                                  entry.event, entry.quantifier)}
+                    point = self.radio.location_table_lookup(entry.country_code,
+                                                             entry.location_table_number,
+                                                             entry.location)
+                    if point is not None:
+                        record.update({"location_name": point.name,
+                                       "latitude": point.latitude,
+                                       "longitude": point.longitude})
+                    print(json.dumps(record))
         elif evt_type == nrsc5.EventType.NAVTEQ_ALTERNATE_FREQUENCIES:
             for entry in evt.entries:
                 if self.navteq_alternate_frequencies.get(entry.index) != entry.frequency_hz:
                     self.navteq_alternate_frequencies[entry.index] = entry.frequency_hz
                     logging.info("NAVTEQ alternate frequency: index=%d frequency=%.1f MHz",
                                  entry.index, entry.frequency_hz / 1000000)
+                    if self.args.decode_traffic:
+                        print(json.dumps({"kind": "navteq_alternate_frequency",
+                                          "port": evt.port, "seq": evt.seq,
+                                          "index": entry.index,
+                                          "frequency_hz": entry.frequency_hz}))
         elif evt_type == nrsc5.EventType.LOT:
             if self.args.dump_aas_files:
                 path = os.path.join(self.args.dump_aas_files, evt.name)
@@ -443,24 +455,6 @@ class NRSC5CLI:
                           evt.utc_offset,
                           evt.dst_schedule,
                           "yes" if evt.dst_regional else "no", "yes" if evt.dst_local else "no")
-
-    def dump_navteq_data(self, evt_type, evt):
-        if not self.navteq_output or evt.mime != nrsc5.MIMEType.NAVTEQ:
-            return
-
-        record = {
-            "kind": "packet" if evt_type == nrsc5.EventType.PACKET else "stream",
-            "port": evt.port,
-            "seq": evt.seq,
-            "mime": evt.mime.name,
-            "service": evt.service.number,
-            "service_name": evt.service.name,
-            "service_data_type": evt.component.data.service_data_type.name,
-            "aas_type": evt.component.data.type.name,
-            "data_hex": evt.data.hex(),
-        }
-        self.navteq_output.write(json.dumps(record, separators=(",", ":")) + "\n")
-        self.navteq_output.flush()
 
     def log_navteq_digital_traffic_entry(self, entry):
         event_description = self.radio.alert_c_event_description(entry.event,

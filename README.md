@@ -128,7 +128,7 @@ Replace `64` with `32` if you want a 32-bit build. Once the build is complete, c
     --dump-aas-files dir-name            dump AAS files
                                            (WARNING: insecure)
     --dump-hdc file-name                 dump HDC packets
-    --dump-navteq file-name              dump NAVTEQ packets/streams as JSON Lines
+    --decode-traffic                     write decoded NAVTEQ traffic records to stdout
     --location-table file-name           resolve NAVTEQ locations from a location-table TSV
 
 ### Examples:
@@ -165,13 +165,15 @@ If you would like to build an application that makes use of nrsc5's functionalit
 
 Note: When using the Python API or the Python command-line application on Windows, place `libnrsc5.dll` in the same folder as `nrsc5.py`.
 
-### NAVTEQ packet capture
+### NAVTEQ traffic decoding
 
 NAVTEQ Digital Traffic packets are decoded through the C events
 `NRSC5_EVENT_NAVTEQ_DIGITAL_TRAFFIC` and
-`NRSC5_EVENT_NAVTEQ_ALTERNATE_FREQUENCIES`, with equivalent Python events. The
-generic packet event is still emitted, and `--dump-navteq` preserves those raw
-packets as JSON Lines.
+`NRSC5_EVENT_NAVTEQ_ALTERNATE_FREQUENCIES`, with equivalent Python events. Run
+with `--decode-traffic` to write one JSON record per decoded entry and
+alternate-frequency update to stdout. Raw packet hex is available at debug log
+level (`-l 0` or `-l 1`). Pass `--location-table` to include location names
+and coordinates in both the decoded records and debug logs.
 
 Descriptions for all 1,552 defined ALERT-C event codes are compiled from the
 [OpenStreetMap TMC event list](https://wiki.openstreetmap.org/wiki/TMC/Event_Code_List).
