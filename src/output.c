@@ -888,7 +888,10 @@ static void ttn_weather_cb(unsigned int timestamp, unsigned int count,
     {
         if (cities[i].city.name)
         {
+            char *name = strdup(cities[i].city.name);
             unsigned int j;
+            if (!name)
+                continue;
             for (j = 0; j < st->ttn_weather_city_count; j++)
                 if (st->ttn_weather_cities[j].city_id == cities[i].city.city_id)
                     break;
@@ -899,6 +902,8 @@ static void ttn_weather_cb(unsigned int timestamp, unsigned int count,
                 if (grown)
                 {
                     st->ttn_weather_cities = grown;
+                    memset(&st->ttn_weather_cities[j], 0,
+                           sizeof(st->ttn_weather_cities[j]));
                     st->ttn_weather_city_count++;
                 }
             }
@@ -906,9 +911,14 @@ static void ttn_weather_cb(unsigned int timestamp, unsigned int count,
             {
                 free((void *)st->ttn_weather_cities[j].name);
                 st->ttn_weather_cities[j] = cities[i].city;
-                st->ttn_weather_cities[j].name = strdup(cities[i].city.name);
+                st->ttn_weather_cities[j].name = name;
+                name = NULL;
             }
+            free(name);
         }
+    }
+    for (unsigned int i = 0; i < count; i++)
+    {
         copy[i] = cities[i];
         if (!copy[i].city.name)
         {
