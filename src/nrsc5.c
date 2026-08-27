@@ -617,6 +617,10 @@ int nrsc5_pipe_samples_cu8(nrsc5_t *st, const uint8_t *samples, unsigned int len
 {
     unsigned int sample_groups;
 
+    // Reject invalid carry state before indexing the four-byte buffer.
+    if (st->leftover_u8_num >= sizeof(st->leftover_u8))
+        return 1;
+
     while (st->leftover_u8_num > 0 && length > 0)
     {
         st->leftover_u8[st->leftover_u8_num++] = samples[0];

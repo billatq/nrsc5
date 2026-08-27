@@ -37,8 +37,11 @@ add_executable (
     ../src/ttn_tpeg.c
     ../src/location_table.c
 )
-target_include_directories (ttn_tpeg_test PRIVATE ../include ../src)
-target_link_libraries (ttn_tpeg_test PRIVATE z)
+target_include_directories (ttn_tpeg_test PRIVATE ../include ../src ${ZLIB_INCLUDE_DIRS})
+target_link_libraries (ttn_tpeg_test PRIVATE ${ZLIB_LIBRARIES})
+if (ZLIB_BUILTIN)
+    add_dependencies (ttn_tpeg_test ${ZLIB_BUILTIN})
+endif ()
 add_test (NAME ttn_tpeg_test COMMAND ttn_tpeg_test)
 
 add_executable (

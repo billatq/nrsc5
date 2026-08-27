@@ -22,6 +22,7 @@ include_directories (
     ${AO_INCLUDE_DIRS}
     ${RTL_SDR_INCLUDE_DIRS}
     ${FFTW3F_INCLUDE_DIRS}
+    ${ZLIB_INCLUDE_DIRS}
     "${CMAKE_CURRENT_BINARY_DIR}"
 )
 link_directories (
@@ -69,7 +70,7 @@ set (
     ${THREAD_LIBRARY}
     ${SOCKET_LIBRARY}
     m
-    z
+    ${ZLIB_LIBRARIES}
 )
 
 add_library (
